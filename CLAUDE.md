@@ -63,3 +63,7 @@ CMakeの`find_package(Vulkan REQUIRED)` / `Vulkan::Vulkan`は、Conanの`CMakeDe
 このプロジェクトは学習用に使います。
 AIによるコード変更を行う際は、なるべく小さい単位で変更を行い、変更の意図や理由を明確にコメントとして残してください。
 イディオムやベストプラクティスに従うことを心がけ、コードの可読性と保守性を重視してください。
+
+### コミットメッセージ
+
+[Conventional Commits](https://www.conventionalcommits.org/)のフォーマットに従うこと（例: `feat: add surface creation`, `fix: correct swapchain extent calculation`, `refactor: split main.cpp into VulkanApp class`）。
