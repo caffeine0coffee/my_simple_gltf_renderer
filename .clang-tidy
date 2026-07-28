@@ -1,0 +1,88 @@
+---
+# Google C++ Style Guideに準拠させるためのチェック構成。
+# google-* がGoogle C++ Style Guideのルールを直接実装しているチェック群で、
+# readability-identifier-naming で命名規則（下記CheckOptions）を強制する。
+# bugprone-*/modernize-*/performance-* はGoogleの内部ツールチェインでも
+# 併用されている一般的なバグ検出・モダンC++移行チェック。
+#
+# 個別に無効化しているもの:
+# - readability-implicit-bool-conversion: GLFW/VulkanのC APIはint/VkBool32を
+#   真偽値として返す設計であり、`if (!glfwInit())`のような書き方はそれらの
+#   C APIとの通常の付き合い方であるため対象外とする。
+# - misc-include-cleaner: vulkan_raii.hpp/glfw3.hのようなアンブレラヘッダ経由で
+#   使うのが正しい流儀のシンボルまで「直接includeすべき」と誤検知するため。
+Checks: >
+  -*,
+  bugprone-*,
+  google-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -readability-implicit-bool-conversion,
+  -misc-include-cleaner,
+WarningsAsErrors: ''
+HeaderFilterRegex: '^.*/src/.*'
+FormatStyle: file
+CheckOptions:
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.UnionCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantPrefix
+    value: 'k'
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.TemplateParameterCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalFunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.ProtectedMemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.PublicMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalConstantPrefix
+    value: 'k'
+  - key: readability-identifier-naming.StaticConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.StaticConstantPrefix
+    value: 'k'
+  - key: readability-identifier-naming.ClassConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.ClassConstantPrefix
+    value: 'k'
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstexprVariablePrefix
+    value: 'k'
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-line-length-check.LineLength
+    value: '120'
