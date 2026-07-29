@@ -111,14 +111,30 @@ int main() {
     }
 #endif
 
-    spdlog::info("Vulkan instance created ({} extensions, {} layers enabled)", extensions.size(), layers.size());
+    // glfwCreateWindowSurface() はRAII非対応のC APIで、出力引数として
+    // 生のVkSurfaceKHRを返すため、一旦生ハンドルで受け取ってから
+    // vk::raii::SurfaceKHRへラップして所有権を移す。
+    std::optional<vk::raii::SurfaceKHR> surface;
+    {
+      VkSurfaceKHR raw_surface{};
+      if (glfwCreateWindowSurface(*instance, window, nullptr, &raw_surface) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create window surface");
+      }
+      surface.emplace(instance, raw_surface);
+    }
+
+    spdlog::info("Vulkan instance and surface created ({} extensions, {} layers enabled)", extensions.size(),
+                 layers.size());
 
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
     }
 
     // vk::raii::DebugUtilsMessengerEXT / Instance はスコープを抜ける際に
-    // 宣言と逆順で自動破棄されるため、明示的な後始末はGLFW分のみでよい。
+    // 宣言と逆順で自動破棄されるため、基本的に明示的な後始末はGLFW分のみでよい。
+    // ただしSurfaceはウィンドウハンドルに依存するため、例外的に
+    // ウィンドウを破棄する前に明示的に破棄しておく必要がある。
+    surface.reset();
     glfwDestroyWindow(window);
     glfwTerminate();
   } catch (const std::exception& e) {
