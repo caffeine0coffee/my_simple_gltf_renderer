@@ -58,12 +58,19 @@ CMakeの`find_package(Vulkan REQUIRED)` / `Vulkan::Vulkan`は、Conanの`CMakeDe
 
 次のマイルストーンでSurface/物理デバイス選択/論理デバイス作成に着手する際、責務が増える段階で`main.cpp`をクラス・ファイル単位に分割する想定。
 
-## AIによる変更を行う際の注意点
+### コミットメッセージ
+
+[Conventional Commits](https://www.conventionalcommits.org/)のフォーマットに従うこと（例: `feat: add surface creation`, `fix: correct swapchain extent calculation`, `refactor: split main.cpp into VulkanApp class`）。
+
+## AIに対する注意事項
+
+### コード変更について
 
 このプロジェクトは学習用に使います。
 AIによるコード変更を行う際は、なるべく小さい単位で変更を行い、変更の意図や理由を明確にコメントとして残してください。
 イディオムやベストプラクティスに従うことを心がけ、コードの可読性と保守性を重視してください。
 
-### コミットメッセージ
+### チャットでの回答について
 
-[Conventional Commits](https://www.conventionalcommits.org/)のフォーマットに従うこと（例: `feat: add surface creation`, `fix: correct swapchain extent calculation`, `refactor: split main.cpp into VulkanApp class`）。
+必ず日本語で回答してください。
+主語を明確にし、箇条書きで文章を構造化するなど、テクニカルライティングの手法を用いて読みやすい文章で回答してください。
