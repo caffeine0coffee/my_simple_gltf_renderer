@@ -11,6 +11,11 @@
 #   C APIとの通常の付き合い方であるため対象外とする。
 # - misc-include-cleaner: vulkan_raii.hpp/glfw3.hのようなアンブレラヘッダ経由で
 #   使うのが正しい流儀のシンボルまで「直接includeすべき」と誤検知するため。
+#
+# CheckOptionsのmisc-non-private-member-variables-in-classes.
+# IgnoreClassesWithAllMemberVariablesBeingPublicについて:
+# QueueFamilyIndicesのような「全メンバーがpublicな純粋データ集成体」は
+# カプセル化を意図していないため、getter/setter化を要求する対象から除外する。
 Checks: >
   -*,
   bugprone-*,
@@ -86,3 +91,5 @@ CheckOptions:
     value: UPPER_CASE
   - key: readability-line-length-check.LineLength
     value: '120'
+  - key: misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic
+    value: 'true'
