@@ -12,6 +12,10 @@ find_package(glfw3 REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(spdlog REQUIRED)
 
-add_executable(gltf_renderer src/main.cpp)
+add_executable(gltf_renderer
+    src/main.cpp
+    src/window.cpp
+    src/vulkan_app.cpp
+)
 target_link_libraries(gltf_renderer PRIVATE glfw Vulkan::Vulkan spdlog::spdlog)
 target_compile_options(gltf_renderer PRIVATE -Wall -Wextra -Wpedantic)
