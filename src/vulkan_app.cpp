@@ -171,10 +171,18 @@ VulkanApp::QueueFamilyIndices VulkanApp::FindQueueFamilies(const vk::raii::Physi
 
 void VulkanApp::CreateLogicalDevice() {
   const auto indices = FindQueueFamilies(physical_device_);
+  // PickPhysicalDevice()がIsDeviceSuitable()で必須キューファミリーの存在を
+  // 確認済みのdeviceのみを選択しているため本来失敗しないが、
+  // bugprone-unchecked-optional-access対応を兼ねて明示的に検証する。
+  if (!indices.graphics_family.has_value() || !indices.present_family.has_value()) {
+    throw std::runtime_error("selected physical device unexpectedly lacks required queue families");
+  }
+  const auto graphics_family = *indices.graphics_family;
+  const auto present_family = *indices.present_family;
 
   // グラフィックスキューとプレゼントキューが同一ファミリーの場合、
   // DeviceQueueCreateInfoを1つにまとめる必要があるためstd::setで重複排除する。
-  const std::set<uint32_t> unique_queue_families = {indices.graphics_family.value(), indices.present_family.value()};
+  const std::set<uint32_t> unique_queue_families = {graphics_family, present_family};
 
   constexpr float kQueuePriority = 1.0F;
   std::vector<vk::DeviceQueueCreateInfo> queue_create_infos;
@@ -197,8 +205,8 @@ void VulkanApp::CreateLogicalDevice() {
   };
 
   device_ = vk::raii::Device(physical_device_, device_create_info);
-  graphics_queue_ = device_.getQueue(indices.graphics_family.value(), 0);
-  present_queue_ = device_.getQueue(indices.present_family.value(), 0);
+  graphics_queue_ = device_.getQueue(graphics_family, 0);
+  present_queue_ = device_.getQueue(present_family, 0);
 }
 
 VulkanApp::SwapchainSupportDetails VulkanApp::QuerySwapchainSupport(const vk::raii::PhysicalDevice& device) const {
@@ -255,9 +263,16 @@ void VulkanApp::CreateSwapchain() {
   }
 
   const auto indices = FindQueueFamilies(physical_device_);
-  const std::array<uint32_t, 2> queue_family_indices = {indices.graphics_family.value(),
-                                                        indices.present_family.value()};
-  const auto same_family = indices.graphics_family.value() == indices.present_family.value();
+  // PickPhysicalDevice()がIsDeviceSuitable()で必須キューファミリーの存在を
+  // 確認済みのdeviceのみを選択しているため本来失敗しないが、
+  // bugprone-unchecked-optional-access対応を兼ねて明示的に検証する。
+  if (!indices.graphics_family.has_value() || !indices.present_family.has_value()) {
+    throw std::runtime_error("selected physical device unexpectedly lacks required queue families");
+  }
+  const auto graphics_family = *indices.graphics_family;
+  const auto present_family = *indices.present_family;
+  const std::array<uint32_t, 2> queue_family_indices = {graphics_family, present_family};
+  const auto same_family = graphics_family == present_family;
 
   const vk::SwapchainCreateInfoKHR create_info{
       .surface = *surface_,
