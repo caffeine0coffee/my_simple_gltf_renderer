@@ -33,7 +33,15 @@ Releaseビルドの場合は `-s build_type=Release` / `--preset conan-release` 
 
 `CMAKE_EXPORT_COMPILE_COMMANDS ON` により `build/Debug/compile_commands.json` が生成され、リポジトリ直下に `compile_commands.json` としてシンボリックリンクしてある（clangd等のIDEツール用。`.gitignore`対象）。configureをやり直した場合はリンクを再作成すること。
 
-テスト・lintの仕組みは未整備（現時点ではコードが`main.cpp`一つのみ）。
+clang-tidyを手動実行する場合は、clangd（v19系）とバージョンを揃えるため `clang-tidy-19` / `run-clang-tidy-19` を明示的に指定すること（無印の`clang-tidy`/`run-clang-tidy`はAPTの都合でv18系を指すため）。clangdは内蔵デフォルトにより一部のチェック（`bugprone-unchecked-optional-access`等）をエディタ上で抑制するため、lintの検知はエディタではなく下記commitフックに委ねている。
+
+### commitフック（lint）
+
+`git config core.hooksPath .githooks` を一度実行すると、コミット時に `.githooks/pre-commit` が有効になる（gitの仕様上リポジトリに含めるだけでは自動有効化されないため、clone後に各自実行が必要）。
+
+`src/` 配下の `.cpp`/`.h`/`.hpp` に変更がある場合のみ `run-clang-tidy-19 -p build/Debug src/` を実行し、警告が1件でもあればコミットを中止する。事前に `build/Debug/compile_commands.json` の生成（configure）と `clang-tidy-19`（`sudo apt install clang-tidy-19`）が必要。緊急時は `git commit --no-verify` でスキップできる。
+
+テストの仕組みは未整備。
 
 ## 依存関係（Conan / ConanCenter）
 
