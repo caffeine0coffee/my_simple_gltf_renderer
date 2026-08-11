@@ -43,11 +43,17 @@ class VulkanApp {
   void CreateSurface();
   void PickPhysicalDevice();
   void CreateLogicalDevice();
+  void CreateSwapchain();
 
   [[nodiscard]] bool IsDeviceSuitable(const vk::raii::PhysicalDevice& device) const;
   [[nodiscard]] QueueFamilyIndices FindQueueFamilies(const vk::raii::PhysicalDevice& device) const;
   [[nodiscard]] static bool CheckDeviceExtensionSupport(const vk::raii::PhysicalDevice& device);
   [[nodiscard]] SwapchainSupportDetails QuerySwapchainSupport(const vk::raii::PhysicalDevice& device) const;
+  [[nodiscard]] static vk::SurfaceFormatKHR ChooseSwapSurfaceFormat(
+      const std::vector<vk::SurfaceFormatKHR>& available_formats);
+  [[nodiscard]] static vk::PresentModeKHR ChooseSwapPresentMode(
+      const std::vector<vk::PresentModeKHR>& available_present_modes);
+  [[nodiscard]] vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) const;
 
   Window& window_;  // 非所有参照。破棄順序の制約は呼び出し側(main.cpp)の変数宣言順で保証する。
 
@@ -63,4 +69,8 @@ class VulkanApp {
   vk::raii::Device device_ = nullptr;
   vk::raii::Queue graphics_queue_ = nullptr;
   vk::raii::Queue present_queue_ = nullptr;
+  vk::raii::SwapchainKHR swapchain_ = nullptr;
+  std::vector<vk::Image> swapchain_images_;
+  vk::Format swapchain_image_format_ = vk::Format::eUndefined;
+  vk::Extent2D swapchain_extent_;
 };

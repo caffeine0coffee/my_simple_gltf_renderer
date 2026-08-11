@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string_view>
@@ -42,6 +43,7 @@ VulkanApp::VulkanApp(Window& window) : window_(window) {
   CreateSurface();
   PickPhysicalDevice();
   CreateLogicalDevice();
+  CreateSwapchain();
 
   spdlog::info("Vulkan instance and surface created");
 }
@@ -205,4 +207,82 @@ VulkanApp::SwapchainSupportDetails VulkanApp::QuerySwapchainSupport(const vk::ra
       .formats = device.getSurfaceFormatsKHR(*surface_),
       .present_modes = device.getSurfacePresentModesKHR(*surface_),
   };
+}
+
+vk::SurfaceFormatKHR VulkanApp::ChooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& available_formats) {
+  for (const vk::SurfaceFormatKHR& format : available_formats) {
+    if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
+      return format;
+    }
+  }
+  // 希望フォーマットが無ければ先頭を採用する。
+  return available_formats.front();
+}
+
+vk::PresentModeKHR VulkanApp::ChooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& available_present_modes) {
+  if (std::ranges::contains(available_present_modes, vk::PresentModeKHR::eMailbox)) {
+    return vk::PresentModeKHR::eMailbox;
+  }
+  // FIFOは仕様上必ずサポートされるので安全なフォールバックになる。
+  return vk::PresentModeKHR::eFifo;
+}
+
+vk::Extent2D VulkanApp::ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) const {
+  if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+    return capabilities.currentExtent;
+  }
+  // ウィンドウマネージャがcurrentExtentを固定していない(高DPI等)場合は、
+  // フレームバッファの実サイズをGLFWから取得し、min/maxでクランプする。
+  const vk::Extent2D framebuffer_size = window_.GetFramebufferSize();
+  return vk::Extent2D{
+      .width = std::clamp(framebuffer_size.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+      .height =
+          std::clamp(framebuffer_size.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height),
+  };
+}
+
+void VulkanApp::CreateSwapchain() {
+  const SwapchainSupportDetails support = QuerySwapchainSupport(physical_device_);
+  const vk::SurfaceFormatKHR surface_format = ChooseSwapSurfaceFormat(support.formats);
+  const vk::PresentModeKHR present_mode = ChooseSwapPresentMode(support.present_modes);
+  const vk::Extent2D extent = ChooseSwapExtent(support.capabilities);
+
+  // 最小数ちょうどだとドライバの内部処理待ちでスループットが落ちうるため+1する。
+  // ただしmaxImageCountが0(上限無し)でない場合はその上限でクランプする。
+  uint32_t image_count = support.capabilities.minImageCount + 1;
+  if (support.capabilities.maxImageCount > 0 && image_count > support.capabilities.maxImageCount) {
+    image_count = support.capabilities.maxImageCount;
+  }
+
+  const QueueFamilyIndices indices = FindQueueFamilies(physical_device_);
+  const std::array<uint32_t, 2> queue_family_indices = {indices.graphics_family.value(),
+                                                        indices.present_family.value()};
+  const bool same_family = indices.graphics_family.value() == indices.present_family.value();
+
+  const vk::SwapchainCreateInfoKHR create_info{
+      .surface = *surface_,
+      .minImageCount = image_count,
+      .imageFormat = surface_format.format,
+      .imageColorSpace = surface_format.colorSpace,
+      .imageExtent = extent,
+      .imageArrayLayers = 1,
+      .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+      // グラフィックスキューとプレゼントキューが別ファミリーの場合、両方から
+      // イメージにアクセスできるようConcurrentモードにする(所有権移譲が不要な分シンプル)。
+      .imageSharingMode = same_family ? vk::SharingMode::eExclusive : vk::SharingMode::eConcurrent,
+      .queueFamilyIndexCount = same_family ? 0U : static_cast<uint32_t>(queue_family_indices.size()),
+      .pQueueFamilyIndices = same_family ? nullptr : queue_family_indices.data(),
+      .preTransform = support.capabilities.currentTransform,
+      .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+      .presentMode = present_mode,
+      .clipped = vk::True,
+  };
+
+  swapchain_ = vk::raii::SwapchainKHR(device_, create_info);
+  swapchain_images_ = swapchain_.getImages();
+  swapchain_image_format_ = surface_format.format;
+  swapchain_extent_ = extent;
+
+  spdlog::info("swapchain created ({}x{}, format={}, {} images)", swapchain_extent_.width, swapchain_extent_.height,
+               vk::to_string(swapchain_image_format_), swapchain_images_.size());
 }
