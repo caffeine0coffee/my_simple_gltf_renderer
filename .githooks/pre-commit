@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# clangd上ではclangdの内蔵デフォルトにより一部のclang-tidyチェック
+# (bugprone-unchecked-optional-access等)が抑制され、エディタ上で検知できない。
+# そのためコミット時にrun-clang-tidy-19でプロジェクト全体を検査する。
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+# src/配下のC/C++ファイルに変更がなければ検査不要
+if ! git diff --cached --name-only --diff-filter=ACM | grep -qE '^src/.*\.(cpp|h|hpp)$'; then
+  exit 0
+fi
+
+compile_db="build/Debug/compile_commands.json"
+if [ ! -f "$compile_db" ]; then
+  echo "エラー: ${compile_db} が見つかりません。先に以下を実行してください:" >&2
+  echo "  cmake --preset conan-debug && cmake --build --preset conan-debug" >&2
+  exit 1
+fi
+
+if ! command -v run-clang-tidy-19 >/dev/null 2>&1; then
+  echo "エラー: run-clang-tidy-19 が見つかりません。'sudo apt install clang-tidy-19' を実行してください。" >&2
+  exit 1
+fi
+
+echo "clang-tidy-19でsrc/を検査しています..."
+output="$(run-clang-tidy-19 -p build/Debug src/ 2>&1)" || true
+
+if grep -q "warning:" <<< "$output"; then
+  grep "warning:" <<< "$output" >&2
+  echo "" >&2
+  echo "clang-tidyの警告が見つかったためコミットを中止しました。修正するか、緊急時は 'git commit --no-verify' で回避してください。" >&2
+  exit 1
+fi
+
+exit 0
