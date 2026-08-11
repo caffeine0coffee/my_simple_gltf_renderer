@@ -49,13 +49,13 @@ VulkanApp::VulkanApp(Window& window) : window_(window) {
 }
 
 void VulkanApp::CreateInstance() {
-  std::vector<const char*> extensions = Window::GetRequiredInstanceExtensions();
+  auto extensions = Window::GetRequiredInstanceExtensions();
 
   std::vector<const char*> layers;
 #ifndef NDEBUG
   // Debugビルドでのみ検証レイヤーとデバッグメッセンジャー用拡張を要求する。
   // レイヤーが環境に存在しない場合は警告のみでレイヤー無しの起動を継続する。
-  const std::vector<vk::LayerProperties> available_layers = context_.enumerateInstanceLayerProperties();
+  const auto available_layers = context_.enumerateInstanceLayerProperties();
   validation_available_ = std::ranges::any_of(available_layers, [](const vk::LayerProperties& layer) {
     return std::strcmp(layer.layerName, kValidationLayerName) == 0;
   });
@@ -103,7 +103,7 @@ void VulkanApp::SetupDebugMessenger() {
 void VulkanApp::CreateSurface() { surface_ = window_.CreateSurface(instance_); }
 
 void VulkanApp::PickPhysicalDevice() {
-  const std::vector<vk::raii::PhysicalDevice> devices = instance_.enumeratePhysicalDevices();
+  const auto devices = instance_.enumeratePhysicalDevices();
   if (devices.empty()) {
     throw std::runtime_error("failed to find a GPU with Vulkan support");
   }
@@ -112,7 +112,7 @@ void VulkanApp::PickPhysicalDevice() {
   // ディスクリートGPUがあれば優先し、無ければ最初に見つかったものを使う
   // (学習用途につき詳細なスコアリングは行わない)。
   std::optional<vk::raii::PhysicalDevice> fallback;
-  for (const vk::raii::PhysicalDevice& device : devices) {
+  for (const auto& device : devices) {
     if (!IsDeviceSuitable(device)) {
       continue;
     }
@@ -139,12 +139,12 @@ bool VulkanApp::IsDeviceSuitable(const vk::raii::PhysicalDevice& device) const {
   }
   // VK_KHR_swapchain拡張自体はサポートしていても、実際に使えるフォーマットや
   // プレゼンテーションモードが1つも無いデバイスは描画に使えないため除外する。
-  const SwapchainSupportDetails swapchain_support = QuerySwapchainSupport(device);
+  const auto swapchain_support = QuerySwapchainSupport(device);
   return !swapchain_support.formats.empty() && !swapchain_support.present_modes.empty();
 }
 
 bool VulkanApp::CheckDeviceExtensionSupport(const vk::raii::PhysicalDevice& device) {
-  const std::vector<vk::ExtensionProperties> available_extensions = device.enumerateDeviceExtensionProperties();
+  const auto available_extensions = device.enumerateDeviceExtensionProperties();
   return std::ranges::all_of(kDeviceExtensions, [&available_extensions](std::string_view required) {
     return std::ranges::any_of(available_extensions, [required](const vk::ExtensionProperties& extension) {
       return required == std::string_view(extension.extensionName);
@@ -154,7 +154,7 @@ bool VulkanApp::CheckDeviceExtensionSupport(const vk::raii::PhysicalDevice& devi
 
 VulkanApp::QueueFamilyIndices VulkanApp::FindQueueFamilies(const vk::raii::PhysicalDevice& device) const {
   QueueFamilyIndices indices;
-  const std::vector<vk::QueueFamilyProperties> queue_families = device.getQueueFamilyProperties();
+  const auto queue_families = device.getQueueFamilyProperties();
   for (uint32_t i = 0; i < queue_families.size(); ++i) {
     if (queue_families[i].queueFlags & vk::QueueFlagBits::eGraphics) {
       indices.graphics_family = i;
@@ -170,7 +170,7 @@ VulkanApp::QueueFamilyIndices VulkanApp::FindQueueFamilies(const vk::raii::Physi
 }
 
 void VulkanApp::CreateLogicalDevice() {
-  const QueueFamilyIndices indices = FindQueueFamilies(physical_device_);
+  const auto indices = FindQueueFamilies(physical_device_);
 
   // グラフィックスキューとプレゼントキューが同一ファミリーの場合、
   // DeviceQueueCreateInfoを1つにまとめる必要があるためstd::setで重複排除する。
@@ -179,7 +179,7 @@ void VulkanApp::CreateLogicalDevice() {
   constexpr float kQueuePriority = 1.0F;
   std::vector<vk::DeviceQueueCreateInfo> queue_create_infos;
   queue_create_infos.reserve(unique_queue_families.size());
-  for (uint32_t family : unique_queue_families) {
+  for (const auto family : unique_queue_families) {
     queue_create_infos.push_back(vk::DeviceQueueCreateInfo{
         .queueFamilyIndex = family,
         .queueCount = 1,
@@ -210,7 +210,7 @@ VulkanApp::SwapchainSupportDetails VulkanApp::QuerySwapchainSupport(const vk::ra
 }
 
 vk::SurfaceFormatKHR VulkanApp::ChooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& available_formats) {
-  for (const vk::SurfaceFormatKHR& format : available_formats) {
+  for (const auto& format : available_formats) {
     if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
       return format;
     }
@@ -233,7 +233,7 @@ vk::Extent2D VulkanApp::ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capab
   }
   // ウィンドウマネージャがcurrentExtentを固定していない(高DPI等)場合は、
   // フレームバッファの実サイズをGLFWから取得し、min/maxでクランプする。
-  const vk::Extent2D framebuffer_size = window_.GetFramebufferSize();
+  const auto framebuffer_size = window_.GetFramebufferSize();
   return vk::Extent2D{
       .width = std::clamp(framebuffer_size.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
       .height =
@@ -242,10 +242,10 @@ vk::Extent2D VulkanApp::ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capab
 }
 
 void VulkanApp::CreateSwapchain() {
-  const SwapchainSupportDetails support = QuerySwapchainSupport(physical_device_);
-  const vk::SurfaceFormatKHR surface_format = ChooseSwapSurfaceFormat(support.formats);
-  const vk::PresentModeKHR present_mode = ChooseSwapPresentMode(support.present_modes);
-  const vk::Extent2D extent = ChooseSwapExtent(support.capabilities);
+  const auto support = QuerySwapchainSupport(physical_device_);
+  const auto surface_format = ChooseSwapSurfaceFormat(support.formats);
+  const auto present_mode = ChooseSwapPresentMode(support.present_modes);
+  const auto extent = ChooseSwapExtent(support.capabilities);
 
   // 最小数ちょうどだとドライバの内部処理待ちでスループットが落ちうるため+1する。
   // ただしmaxImageCountが0(上限無し)でない場合はその上限でクランプする。
@@ -254,10 +254,10 @@ void VulkanApp::CreateSwapchain() {
     image_count = support.capabilities.maxImageCount;
   }
 
-  const QueueFamilyIndices indices = FindQueueFamilies(physical_device_);
+  const auto indices = FindQueueFamilies(physical_device_);
   const std::array<uint32_t, 2> queue_family_indices = {indices.graphics_family.value(),
                                                         indices.present_family.value()};
-  const bool same_family = indices.graphics_family.value() == indices.present_family.value();
+  const auto same_family = indices.graphics_family.value() == indices.present_family.value();
 
   const vk::SwapchainCreateInfoKHR create_info{
       .surface = *surface_,
