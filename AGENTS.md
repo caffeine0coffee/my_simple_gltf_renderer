@@ -11,6 +11,14 @@ glTF形式のモデルを読み込みレンダリングするためのシンプ�
 - ビルドシステム: CMake
 - パッケージマネージャー: Conan
 
+## 開発・セッション運用ルール（進捗とタスクの管理）
+
+このプロジェクトは複数のAIエージェント・セッションから並行または順次実行される想定です。開発を円滑に進めるため、以下のルールを遵守してください。
+
+1. **作業開始前の状況確認**: 作業開始時は必ず [PROGRESS.md](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/PROGRESS.md) を確認し、現在の実装状況と次に着手すべきタスクを把握してください。
+2. **PROGRESS.mdの更新**: 各タスク（機能実装・リファクタリングなど）の完了時には、必ず PROGRESS.md の実装状況および次タスクのチェックリストを最新状態に更新してください。新規に判明した要件や技術的課題があれば、次タスク欄に追記してください。
+3. **コミット方針**: コード変更とPROGRESS.mdの更新はセットでコミットすることを推奨します。
+
 ## ビルド・実行コマンド
 
 依存関係はConan 2、ビルドはCMake（`cmake_layout()`によるConan標準レイアウト）を使用する。
@@ -64,7 +72,7 @@ CMakeの`find_package(Vulkan REQUIRED)` / `Vulkan::Vulkan`は、Conanの`CMakeDe
 5. RAIIラッパー（`vk::-prefixed`構造体はdesignated initializer前提のため `VULKAN_HPP_NO_STRUCT_CONSTRUCTORS` を定義済み）はスコープを抜ける際に宣言と逆順で自動破棄される。GLFWのウィンドウ/ライブラリのみ明示的に`glfwDestroyWindow`/`glfwTerminate`で後始末する
 6. Vulkan由来の例外（`vk::SystemError`系）・GLFW初期化失敗は`main()`の`try/catch`で捕捉し、`EXIT_FAILURE`で終了する
 
-次のマイルストーンでSurface/物理デバイス選択/論理デバイス作成に着手する際、責務が増える段階で`main.cpp`をクラス・ファイル単位に分割する想定。
+現在の実装状況・次のタスクは [PROGRESS.md](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/PROGRESS.md) を参照。
 
 ### コミットメッセージ
 
