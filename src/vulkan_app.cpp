@@ -44,8 +44,9 @@ VulkanApp::VulkanApp(Window& window) : window_(window) {
   PickPhysicalDevice();
   CreateLogicalDevice();
   CreateSwapchain();
+  CreateImageViews();
 
-  spdlog::info("Vulkan instance and surface created");
+  spdlog::info("Vulkan instance, device, swapchain, and image views created");
 }
 
 void VulkanApp::CreateInstance() {
@@ -300,4 +301,41 @@ void VulkanApp::CreateSwapchain() {
 
   spdlog::info("swapchain created ({}x{}, format={}, {} images)", swapchain_extent_.width, swapchain_extent_.height,
                vk::to_string(swapchain_image_format_), swapchain_images_.size());
+}
+
+void VulkanApp::CreateImageViews() {
+  swapchain_image_views_.reserve(swapchain_images_.size());
+
+  for (const auto& image : swapchain_images_) {
+    // スワップチェーン画像を参照・操作するためのImageViewを作成する。
+    // 画像そのもの（vk::Image）はGPUメモリ上のバッファを指すのみであり、
+    // レンダリングやサンプリングの対象として扱うには、フォーマットや
+    // アクセス範囲（サブリソース）を定義する vk::ImageView が必要となる。
+    const vk::ImageViewCreateInfo create_info{
+        .image = image,
+        // スワップチェーン画像は標準的な2D画像として扱う。
+        .viewType = vk::ImageViewType::e2D,
+        .format = swapchain_image_format_,
+        // 色チャンネルのマッピング設定。eIdentityにより各チャンネルを変更せずそのまま渡す。
+        .components = {
+            .r = vk::ComponentSwizzle::eIdentity,
+            .g = vk::ComponentSwizzle::eIdentity,
+            .b = vk::ComponentSwizzle::eIdentity,
+            .a = vk::ComponentSwizzle::eIdentity,
+        },
+        // 画像のどの部分にアクセスするかを定義するサブリソース範囲。
+        .subresourceRange = {
+            // スワップチェーン画像はカラーレンダーターゲットとして使用する。
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+
+    swapchain_image_views_.emplace_back(device_, create_info);
+  }
+
+  spdlog::info("swapchain image views created ({} views)", swapchain_image_views_.size());
 }

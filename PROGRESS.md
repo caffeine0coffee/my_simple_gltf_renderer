@@ -10,13 +10,14 @@
 - [x] Surface生成
 - [x] 物理デバイス選択・論理デバイス生成（グラフィックスキュー/プレゼントキュー）
 - [x] Swapchain生成
+- [x] Swapchain Image View生成
 - [x] `main.cpp`から`VulkanApp`/`Window`クラスへの分割（[`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
 
 ## 次のタスク
 
 三角形描画までの一連の実装を優先順に進める想定です。
 
-- [ ] Swapchain Image Viewの作成
+- [x] Swapchain Image Viewの作成
 - [ ] レンダーパス（Render Pass）の作成
 - [ ] グラフィックスパイプライン（シェーダー含む）の作成
 - [ ] フレームバッファ（Framebuffer）の作成

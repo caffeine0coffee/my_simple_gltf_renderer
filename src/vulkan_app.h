@@ -44,6 +44,7 @@ class VulkanApp {
   void PickPhysicalDevice();
   void CreateLogicalDevice();
   void CreateSwapchain();
+  void CreateImageViews();
 
   [[nodiscard]] bool IsDeviceSuitable(const vk::raii::PhysicalDevice& device) const;
   [[nodiscard]] QueueFamilyIndices FindQueueFamilies(const vk::raii::PhysicalDevice& device) const;
@@ -73,4 +74,5 @@ class VulkanApp {
   std::vector<vk::Image> swapchain_images_;
   vk::Format swapchain_image_format_ = vk::Format::eUndefined;
   vk::Extent2D swapchain_extent_;
+  std::vector<vk::raii::ImageView> swapchain_image_views_;
 };
