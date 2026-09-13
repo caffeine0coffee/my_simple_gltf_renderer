@@ -1,0 +1,73 @@
+// Project tasks configuration. See https://zed.dev/docs/tasks for documentation.
+//
+// AGENTS.md のビルド・実行手順を Zed のタスクとして定義したもの。
+// タスクパレット (`task: spawn`) から実行できる。
+[
+  // 依存関係のインストール + CMakeToolchain/CMakeDeps 生成
+  // （初回、および conanfile.py 変更時に実行する）
+  {
+    "label": "conan install (Debug)",
+    "command": "conan",
+    "args": ["install", ".", "--build=missing", "-s", "build_type=Debug"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "always",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+
+  // configure（Conan が生成した conan-debug プリセットを使用）
+  // 実行後は compile_commands.json のシンボリックリンク再作成が必要な場合がある。
+  {
+    "label": "CMake configure (conan-debug)",
+    "command": "cmake",
+    "args": ["--preset", "conan-debug"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "always",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+
+  // ビルドのみ
+  {
+    "label": "CMake build (conan-debug)",
+    "command": "cmake",
+    "args": ["--build", "--preset", "conan-debug"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "always",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "save": "all"
+  },
+
+  // 実行のみ（事前にビルドされている前提）
+  {
+    "label": "Run gltf_renderer",
+    "command": "$ZED_WORKTREE_ROOT/build/Debug/gltf_renderer",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "always",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+
+  // ビルド + 実行（通常の開発ループ用）
+  {
+    "label": "Build & Run gltf_renderer",
+    "command": "cmake --build --preset conan-debug && \"$ZED_WORKTREE_ROOT/build/Debug/gltf_renderer\"",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "always",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "save": "all"
+  },
+
+  // 依存関係の再取得からビルドまで一括（クリーンセットアップ用）
+  {
+    "label": "Full setup (conan install + configure + build)",
+    "command": "conan install . --build=missing -s build_type=Debug && cmake --preset conan-debug && cmake --build --preset conan-debug",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "always",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "save": "all"
+  }
+]
