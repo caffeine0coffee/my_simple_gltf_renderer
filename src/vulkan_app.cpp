@@ -18,9 +18,18 @@ namespace {
 constexpr const char* kValidationLayerName = "VK_LAYER_KHRONOS_validation";
 constexpr std::array kDeviceExtensions = {vk::KHRSwapchainExtensionName};
 
-// Validation Layer からのメッセージを受け取るコールバック。
-// PFN_vkDebugUtilsMessengerCallbackEXT の型に厳密に一致させる必要があるため
-// vk:: ラッパー型ではなく生のVulkan C型で宣言する。
+/**
+ * @brief Validation Layer からのメッセージを受け取るコールバック関数。
+ *
+ * PFN_vkDebugUtilsMessengerCallbackEXT の型に厳密に一致させる必要があるため、
+ * vk:: ラッパー型ではなく生のVulkan C型で宣言しています。
+ *
+ * @param message_severity メッセージの重大度（エラー、警告等）。
+ * @param message_type メッセージの種別（一般的な仕様違反、パフォーマンス等、未使用）。
+ * @param callback_data コールバックメッセージの詳細データ。
+ * @param user_data ユーザー定義データポインタ（未使用）。
+ * @return 常に VK_FALSE を返します（VK_TRUE を返すと呼び出し元APIが VK_ERROR_VALIDATION_FAILED_EXT で失敗扱いとなるため）。
+ */
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
                                              VkDebugUtilsMessageTypeFlagsEXT /*message_type*/,
                                              const VkDebugUtilsMessengerCallbackDataEXT* callback_data,

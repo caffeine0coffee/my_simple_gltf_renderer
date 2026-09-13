@@ -6,6 +6,14 @@
 
 namespace {
 
+/**
+ * @brief GLFWのエラーコールバック関数。
+ *
+ * 発生したGLFWエラーをspdlog経由でログに出力します。
+ *
+ * @param error GLFWエラーコード。
+ * @param description エラー内容の説明文字列。
+ */
 void GlfwErrorCallback(int error, const char* description) { spdlog::error("GLFW error {}: {}", error, description); }
 
 }  // namespace

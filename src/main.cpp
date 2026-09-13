@@ -11,6 +11,14 @@ constexpr int kWindowWidth = 800;
 constexpr int kWindowHeight = 600;
 }  // namespace
 
+/**
+ * @brief アプリケーションのエントリーポイント。
+ *
+ * GLFWウィンドウおよびVulkanAppの初期化、イベントループの実行、
+ * 発生した例外のハンドリングを行います。
+ *
+ * @return 正常終了時は EXIT_SUCCESS、エラー発生時は EXIT_FAILURE。
+ */
 int main() {
   try {
     // VulkanApp が保持する Surface はウィンドウハンドルに依存するため、
