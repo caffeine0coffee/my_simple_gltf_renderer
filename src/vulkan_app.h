@@ -101,6 +101,15 @@ class VulkanApp {
   void CreateImageViews();
 
   /**
+   * @brief レンダーパス（描画アタッチメントの設定・サブパス・レイアウト遷移）を生成します。
+   *
+   * カラーアタッチメント（スワップチェーンフォーマット）、サブパス、および
+   * スワップチェーン画像が利用可能になるまで待機するサブパス依存関係を設定します。
+   * なお、Vulkan 1.3ではDynamic RenderingによってRenderPassオブジェクトを省略する手法も存在します。
+   */
+  void CreateRenderPass();
+
+  /**
    * @brief 指定した物理デバイスがアプリケーションの要件（キューファミリー、拡張機能、スワップチェーンサポート）を満たしているかを検証します。
    *
    * @param device 検証対象の物理デバイス。
@@ -181,4 +190,6 @@ class VulkanApp {
   vk::Extent2D swapchain_extent_;
   /// @brief スワップチェーンイメージを参照・操作するためのImageViewのリスト。
   std::vector<vk::raii::ImageView> swapchain_image_views_;
+  /// @brief 描画パス（アタッチメント・サブパス・同期設定）を定義するレンダーパス。
+  vk::raii::RenderPass render_pass_ = nullptr;
 };

@@ -54,8 +54,9 @@ VulkanApp::VulkanApp(Window& window) : window_(window) {
   CreateLogicalDevice();
   CreateSwapchain();
   CreateImageViews();
+  CreateRenderPass();
 
-  spdlog::info("Vulkan instance, device, swapchain, and image views created");
+  spdlog::info("Vulkan instance, device, swapchain, image views, and render pass created");
 }
 
 void VulkanApp::CreateInstance() {
@@ -348,3 +349,91 @@ void VulkanApp::CreateImageViews() {
 
   spdlog::info("swapchain image views created ({} views)", swapchain_image_views_.size());
 }
+
+void VulkanApp::CreateRenderPass() {
+  // =========================================================================
+  // 【Dynamic Rendering（Vulkan 1.3）に関する補足】
+  //
+  // Vulkan 1.3 ではコア機能として Dynamic Rendering（VK_KHR_dynamic_rendering）が導入され、
+  // 事前に vk::RenderPass や vk::Framebuffer オブジェクトを生成・管理することなく、
+  // コマンドバッファ記録時に vkCmdBeginRendering（vk::raii::CommandBuffer::beginRendering）
+  // へ直接アタッチメントの ImageView や Clear 値（vk::RenderingInfo）を渡すだけで
+  // レンダリングパスを開始・実行できるようになりました。
+  //
+  // Dynamic Rendering の利点:
+  // - RenderPass / Framebuffer の事前作成ボイラープレートが不要になる
+  // - パイプライン作成時もフォーマット一覧（VkPipelineRenderingCreateInfo）を指定するだけで済む
+  // - スワップチェーン再生成時の Framebuffer 再生成処理が不要になる
+  //
+  // 本プロジェクトで従来の vk::RenderPass を採用する理由:
+  // - 本プロジェクトは Vulkan の学習を主目的としており、アタッチメントのライフタイム、
+  //   ロード/ストア操作、サブパス構造、サブパス依存関係（メモリ・実行同期）
+  //   といった Vulkan の中核概念を明示的に理解・習得するため、標準的な vk::RenderPass を用いています。
+  // =========================================================================
+
+  // 1. カラーアタッチメントの設定
+  // スワップチェーン画像を描画先（カラーバッファ）としてどのように扱うかを定義する。
+  const vk::AttachmentDescription color_attachment{
+      .format = swapchain_image_format_,
+      // マルチサンプリング（MSAA）は行わないため 1 サンプルを指定。
+      .samples = vk::SampleCountFlagBits::e1,
+      // レンダリング開始時にアタッチメントの内容をクリア（背景色で塗りつぶす）。
+      .loadOp = vk::AttachmentLoadOp::eClear,
+      // レンダリング終了時に描画結果をメモリ（スワップチェーン画像）に保存（画面表示するため）。
+      .storeOp = vk::AttachmentStoreOp::eStore,
+      // ステンシルバッファは現時点では使用しないため Don't Care。
+      .stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
+      .stencilStoreOp = vk::AttachmentStoreOp::eDontCare,
+      // レンダーパス開始前の画像レイアウト。直後にクリアするため以前の内容は不問（Undefined）。
+      .initialLayout = vk::ImageLayout::eUndefined,
+      // レンダーパス終了後の画像レイアウト。スワップチェーンのプレゼンテーションエンジンへ
+      // そのまま渡せるよう PresentSrcKHR に自動遷移させる。
+      .finalLayout = vk::ImageLayout::ePresentSrcKHR,
+  };
+
+  // 2. サブパスにおけるアタッチメントの参照設定
+  // フラグメントシェーダーの出力（layout(location = 0) out vec4 outColor）が
+  // どのアタッチメントに対応するかを定義する。
+  const vk::AttachmentReference color_attachment_ref{
+      .attachment = 0,  // color_attachment 配列のインデックス 0 を参照
+      .layout = vk::ImageLayout::eColorAttachmentOptimal,
+  };
+
+  // 3. サブパスの定義
+  // グラフィックス描画を行う単一のサブパスを定義する。
+  const vk::SubpassDescription subpass{
+      .pipelineBindPoint = vk::PipelineBindPoint::eGraphics,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &color_attachment_ref,
+  };
+
+  // 4. サブパス依存関係（同期設定）の定義
+  // スワップチェーン画像は、ウィンドウシステム／プレゼンテーションエンジンによる表示処理
+  // （読み取り）が完了するまで書き込んではならない。
+  // vkAcquireNextImageKHR でシグナルされるセマフォ待機に加え、レンダーパス開始時
+  // （外部操作: VK_SUBPASS_EXTERNAL）からサブパス 0 への依存関係を明示することで、
+  // カラーアタッチメント出力ステージへの書き込み（ColorAttachmentWrite）が安全に行われるよう同期する。
+  const vk::SubpassDependency dependency{
+      .srcSubpass = vk::SubpassExternal,
+      .dstSubpass = 0,
+      .srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
+      .dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
+      .srcAccessMask = vk::AccessFlags{},
+      .dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+  };
+
+  // 5. レンダーパスの生成
+  const vk::RenderPassCreateInfo render_pass_info{
+      .attachmentCount = 1,
+      .pAttachments = &color_attachment,
+      .subpassCount = 1,
+      .pSubpasses = &subpass,
+      .dependencyCount = 1,
+      .pDependencies = &dependency,
+  };
+
+  render_pass_ = vk::raii::RenderPass(device_, render_pass_info);
+
+  spdlog::info("render pass created");
+}
+
