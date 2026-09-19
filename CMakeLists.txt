@@ -3,6 +3,8 @@ project(gltf_renderer LANGUAGES CXX)
 
 # clangd等のIDEツールがConan経由の依存関係のインクルードパスを解決できるようにする
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# 依存ライブラリのインクルードパスを -isystem ではなく -I で渡し、システム標準パス (/usr/local/include 等) より優先させる
+set(CMAKE_NO_SYSTEM_FROM_IMPORTED ON)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
