@@ -3,6 +3,7 @@
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include <vulkan/vulkan_raii.hpp>
 
+#include <filesystem>
 #include <optional>
 #include <vector>
 
@@ -110,6 +111,32 @@ class VulkanApp {
   void CreateRenderPass();
 
   /**
+   * @brief グラフィックスパイプラインおよびパイプラインレイアウトを生成します。
+   *
+   * 頂点・フラグメントシェーダーのSPIR-Vを読み込んでモジュールを作成し、
+   * ビューポート/シザー動的状態、入力アセンブリ、ラスタライザー、マルチサンプリング、
+   * カラーブレンディングなどの固定機能パイプライン状態を設定してパイプラインを構築します。
+   */
+  void CreateGraphicsPipeline();
+
+  /**
+   * @brief SPIR-Vバイトコードからシェーダーモジュールを生成します。
+   *
+   * @param code SPIR-Vバイナリのバイト列。
+   * @return 生成されたvk::raii::ShaderModule。
+   */
+  [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(const std::vector<char>& code) const;
+
+  /**
+   * @brief 指定したパスからバイナリファイル全体をメモリ上に読み込みます。
+   *
+   * @param file_path 読み込むファイルのパス。
+   * @return 読み込んだバイナリデータのバイト列。
+   * @throw std::runtime_error ファイルが開けない場合。
+   */
+  [[nodiscard]] static std::vector<char> ReadBinaryFile(const std::filesystem::path& file_path);
+
+  /**
    * @brief 指定した物理デバイスがアプリケーションの要件（キューファミリー、拡張機能、スワップチェーンサポート）を満たしているかを検証します。
    *
    * @param device 検証対象の物理デバイス。
@@ -192,4 +219,8 @@ class VulkanApp {
   std::vector<vk::raii::ImageView> swapchain_image_views_;
   /// @brief 描画パス（アタッチメント・サブパス・同期設定）を定義するレンダーパス。
   vk::raii::RenderPass render_pass_ = nullptr;
+  /// @brief パイプライン内で使用するシェーダーリソース（Uniform/Push Constants等）のレイアウト定義。
+  vk::raii::PipelineLayout pipeline_layout_ = nullptr;
+  /// @brief プログラマブルシェーダーおよび固定機能パイプライン状態をカプセル化するグラフィックスパイプライン。
+  vk::raii::Pipeline graphics_pipeline_ = nullptr;
 };

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <fstream>
 #include <limits>
 #include <set>
 #include <stdexcept>
@@ -55,8 +56,9 @@ VulkanApp::VulkanApp(Window& window) : window_(window) {
   CreateSwapchain();
   CreateImageViews();
   CreateRenderPass();
+  CreateGraphicsPipeline();
 
-  spdlog::info("Vulkan instance, device, swapchain, image views, and render pass created");
+  spdlog::info("Vulkan instance, device, swapchain, image views, render pass, and graphics pipeline created");
 }
 
 void VulkanApp::CreateInstance() {
@@ -462,3 +464,167 @@ void VulkanApp::CreateRenderPass() {
   spdlog::info("render pass created");
 }
 
+std::vector<char> VulkanApp::ReadBinaryFile(const std::filesystem::path& file_path) {
+  // std::ios::ate でファイル末尾から開くことで、tellg() により即座にファイルサイズを取得する
+  std::ifstream file(file_path, std::ios::ate | std::ios::binary);
+  if (!file.is_open()) {
+    throw std::runtime_error("failed to open file: " + file_path.string());
+  }
+
+  const auto file_size = file.tellg();
+  if (file_size <= 0) {
+    throw std::runtime_error("shader file is empty: " + file_path.string());
+  }
+
+  std::vector<char> buffer(static_cast<size_t>(file_size));
+  file.seekg(0);
+  file.read(buffer.data(), static_cast<std::streamsize>(file_size));
+  return buffer;
+}
+
+vk::raii::ShaderModule VulkanApp::CreateShaderModule(const std::vector<char>& code) const {
+  if (code.empty() || (code.size() % sizeof(uint32_t) != 0)) {
+    throw std::runtime_error("invalid shader bytecode size");
+  }
+
+  const vk::ShaderModuleCreateInfo create_info{
+      .codeSize = code.size(),
+      // std::vectorのメモリは最大アライメント(max_align_t)が保証されているためuint32_t*へのキャストは安全
+      .pCode = reinterpret_cast<const uint32_t*>(code.data()),
+  };
+
+  return {device_, create_info};
+}
+
+void VulkanApp::CreateGraphicsPipeline() {
+  // 1. シェーダーバイトコード（SPIR-V）の読み込み
+  // SHADER_BINARY_DIR マクロが定義されていればビルド出力先を優先して探索し、
+  // 存在しない場合はカレント作業ディレクトリ相対の shaders/ をフォールバックとして探索する
+  std::filesystem::path shader_dir = "shaders";
+#ifdef SHADER_BINARY_DIR
+  if (std::filesystem::exists(SHADER_BINARY_DIR)) {
+    shader_dir = SHADER_BINARY_DIR;
+  }
+#endif
+
+  const auto vert_shader_code = ReadBinaryFile(shader_dir / "shader.vert.spv");
+  const auto frag_shader_code = ReadBinaryFile(shader_dir / "shader.frag.spv");
+
+  const auto vert_shader_module = CreateShaderModule(vert_shader_code);
+  const auto frag_shader_module = CreateShaderModule(frag_shader_code);
+
+  // 2. プログラマブルシェーダーステージの設定
+  const vk::PipelineShaderStageCreateInfo vert_shader_stage_info{
+      .stage = vk::ShaderStageFlagBits::eVertex,
+      .module = *vert_shader_module,
+      .pName = "main",
+  };
+
+  const vk::PipelineShaderStageCreateInfo frag_shader_stage_info{
+      .stage = vk::ShaderStageFlagBits::eFragment,
+      .module = *frag_shader_module,
+      .pName = "main",
+  };
+
+  const std::array shader_stages = {vert_shader_stage_info, frag_shader_stage_info};
+
+  // 3. 動的状態（Dynamic State）の設定
+  // ビューポートとシザー矩形を実行時に動的変更可能にすることで、ウィンドウリサイズ時のパイプライン再作成を不要にする
+  const std::array dynamic_states = {
+      vk::DynamicState::eViewport,
+      vk::DynamicState::eScissor,
+  };
+
+  const vk::PipelineDynamicStateCreateInfo dynamic_state{
+      .dynamicStateCount = static_cast<uint32_t>(dynamic_states.size()),
+      .pDynamicStates = dynamic_states.data(),
+  };
+
+  // 4. 頂点入力状態（Vertex Input State）の設定
+  // 現時点では頂点座標・カラーをシェーダー内に直接ハードコードしているため、
+  // 頂点バッファのバインディング・アトリビュート記述は空として設定します（将来のタスクで拡張予定）。
+  const vk::PipelineVertexInputStateCreateInfo vertex_input_info{
+      .vertexBindingDescriptionCount = 0,
+      .pVertexBindingDescriptions = nullptr,
+      .vertexAttributeDescriptionCount = 0,
+      .pVertexAttributeDescriptions = nullptr,
+  };
+
+  // 5. 入力アセンブリ状態（Input Assembly State）の設定
+  // 3頂点で1つの三角形を描画するリストトポロジー
+  const vk::PipelineInputAssemblyStateCreateInfo input_assembly{
+      .topology = vk::PrimitiveTopology::eTriangleList,
+      .primitiveRestartEnable = vk::False,
+  };
+
+  // 6. ビューポート状態（Viewport State）の設定
+  // 動的状態として設定しているため、パイプライン作成時点では個数のみ指定しポインタはnullptrとする
+  const vk::PipelineViewportStateCreateInfo viewport_state{
+      .viewportCount = 1,
+      .pViewports = nullptr,
+      .scissorCount = 1,
+      .pScissors = nullptr,
+  };
+
+  // 7. ラスタライザー状態（Rasterization State）の設定
+  // プリミティブをフラグメントへ展開する設定
+  const vk::PipelineRasterizationStateCreateInfo rasterizer{
+      .depthClampEnable = vk::False,
+      .rasterizerDiscardEnable = vk::False,
+      .polygonMode = vk::PolygonMode::eFill,
+      .cullMode = vk::CullModeFlagBits::eBack,
+      // 頂点シェーダー内の三角形頂点は時計回り(Clockwise)順で定義されているため eClockwise を指定
+      .frontFace = vk::FrontFace::eClockwise,
+      .depthBiasEnable = vk::False,
+      .lineWidth = 1.0F,
+  };
+
+  // 8. マルチサンプリング状態（Multisample State）の設定
+  // 現時点ではアンチエイリアシングは無効（1サンプル/ピクセル）
+  const vk::PipelineMultisampleStateCreateInfo multisampling{
+      .rasterizationSamples = vk::SampleCountFlagBits::e1,
+      .sampleShadingEnable = vk::False,
+  };
+
+  // 9. カラーブレンディング状態（Color Blend State）の設定
+  // フレームバッファの既存ピクセルとフラグメントカラーの合成設定（現時点ではブレンド無効・上書き）
+  const vk::PipelineColorBlendAttachmentState color_blend_attachment{
+      .blendEnable = vk::False,
+      .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                        vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+  };
+
+  const vk::PipelineColorBlendStateCreateInfo color_blending{
+      .logicOpEnable = vk::False,
+      .attachmentCount = 1,
+      .pAttachments = &color_blend_attachment,
+  };
+
+  // 10. パイプラインレイアウト（Pipeline Layout）の生成
+  // シェーダー内で参照するUniform変数やPush Constantsのレイアウト（現時点では空）
+  const vk::PipelineLayoutCreateInfo pipeline_layout_info{};
+  pipeline_layout_ = vk::raii::PipelineLayout(device_, pipeline_layout_info);
+
+  // 11. グラフィックスパイプラインの生成
+  const vk::GraphicsPipelineCreateInfo pipeline_info{
+      .stageCount = static_cast<uint32_t>(shader_stages.size()),
+      .pStages = shader_stages.data(),
+      .pVertexInputState = &vertex_input_info,
+      .pInputAssemblyState = &input_assembly,
+      .pViewportState = &viewport_state,
+      .pRasterizationState = &rasterizer,
+      .pMultisampleState = &multisampling,
+      .pDepthStencilState = nullptr,
+      .pColorBlendState = &color_blending,
+      .pDynamicState = &dynamic_state,
+      .layout = *pipeline_layout_,
+      .renderPass = *render_pass_,
+      .subpass = 0,
+      .basePipelineHandle = nullptr,
+      .basePipelineIndex = -1,
+  };
+
+  graphics_pipeline_ = vk::raii::Pipeline(device_, nullptr, pipeline_info);
+
+  spdlog::info("graphics pipeline created");
+}
