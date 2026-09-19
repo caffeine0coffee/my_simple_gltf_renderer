@@ -78,6 +78,18 @@ void VulkanApp::CreateInstance() {
   }
 #endif
 
+  // macOS (MoltenVK) では VK_KHR_portability_enumeration が必要な場合がある
+  vk::InstanceCreateFlags flags{};
+  const auto available_extensions = context_.enumerateInstanceExtensionProperties();
+  const bool has_portability_enumeration =
+      std::ranges::any_of(available_extensions, [](const vk::ExtensionProperties& ext) {
+        return std::string_view(ext.extensionName) == VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+      });
+  if (has_portability_enumeration) {
+    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    flags |= vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
+  }
+
   const vk::ApplicationInfo app_info{
       .pApplicationName = "glTF Renderer",
       .applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
@@ -86,6 +98,7 @@ void VulkanApp::CreateInstance() {
       .apiVersion = VK_API_VERSION_1_3,
   };
   const vk::InstanceCreateInfo instance_create_info{
+      .flags = flags,
       .pApplicationInfo = &app_info,
       .enabledLayerCount = static_cast<uint32_t>(layers.size()),
       .ppEnabledLayerNames = layers.data(),
@@ -206,13 +219,25 @@ void VulkanApp::CreateLogicalDevice() {
     });
   }
 
+  // macOS (MoltenVK) では VK_KHR_portability_subset 拡張がデバイスで利用可能な場合、有効化が必須
+  std::vector<const char*> enabled_extensions(kDeviceExtensions.begin(), kDeviceExtensions.end());
+  const auto available_device_extensions = physical_device_.enumerateDeviceExtensionProperties();
+  constexpr const char* kPortabilitySubsetExtension = "VK_KHR_portability_subset";
+  const bool has_portability_subset =
+      std::ranges::any_of(available_device_extensions, [](const vk::ExtensionProperties& ext) {
+        return std::string_view(ext.extensionName) == kPortabilitySubsetExtension;
+      });
+  if (has_portability_subset) {
+    enabled_extensions.push_back(kPortabilitySubsetExtension);
+  }
+
   // 検証レイヤーはInstanceレベルで既に有効化済みのため、Device側では設定しない
   // (新しいVulkanではDevice側のenabledLayerCountは非推奨/無視される)。
   const vk::DeviceCreateInfo device_create_info{
       .queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size()),
       .pQueueCreateInfos = queue_create_infos.data(),
-      .enabledExtensionCount = static_cast<uint32_t>(kDeviceExtensions.size()),
-      .ppEnabledExtensionNames = kDeviceExtensions.data(),
+      .enabledExtensionCount = static_cast<uint32_t>(enabled_extensions.size()),
+      .ppEnabledExtensionNames = enabled_extensions.data(),
   };
 
   device_ = vk::raii::Device(physical_device_, device_create_info);
