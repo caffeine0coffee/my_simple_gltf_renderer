@@ -57,8 +57,10 @@ VulkanApp::VulkanApp(Window& window) : window_(window) {
   CreateImageViews();
   CreateRenderPass();
   CreateGraphicsPipeline();
+  CreateFramebuffers();
 
-  spdlog::info("Vulkan instance, device, swapchain, image views, render pass, and graphics pipeline created");
+  spdlog::info(
+      "Vulkan instance, device, swapchain, image views, render pass, graphics pipeline, and framebuffers created");
 }
 
 void VulkanApp::CreateInstance() {
@@ -627,4 +629,29 @@ void VulkanApp::CreateGraphicsPipeline() {
   graphics_pipeline_ = vk::raii::Pipeline(device_, nullptr, pipeline_info);
 
   spdlog::info("graphics pipeline created");
+}
+
+void VulkanApp::CreateFramebuffers() {
+  swapchain_framebuffers_.reserve(swapchain_image_views_.size());
+
+  // 各スワップチェーンのImageViewに対してFramebufferを作成します。
+  // Framebufferは、RenderPassで宣言されたアタッチメント（カラーバッファ等）に対して
+  // 実際の描画ターゲットとなるImageViewをバインドする役割を持ちます。
+  for (const auto& image_view : swapchain_image_views_) {
+    // レンダーパス作成時に定義したアタッチメント順にImageViewを指定します
+    const std::array attachments = {*image_view};
+
+    const vk::FramebufferCreateInfo framebuffer_info{
+        .renderPass = *render_pass_,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .width = swapchain_extent_.width,
+        .height = swapchain_extent_.height,
+        .layers = 1,
+    };
+
+    swapchain_framebuffers_.emplace_back(device_, framebuffer_info);
+  }
+
+  spdlog::info("framebuffers created (count: {})", swapchain_framebuffers_.size());
 }

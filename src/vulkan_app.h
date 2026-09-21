@@ -120,6 +120,14 @@ class VulkanApp {
   void CreateGraphicsPipeline();
 
   /**
+   * @brief スワップチェーンの各ImageViewに対応するフレームバッファを生成します。
+   *
+   * レンダーパスで定義されたアタッチメント（カラーバッファ）に実際のスワップチェーンImageViewを
+   * バインドし、描画先ターゲットとして利用可能にします。
+   */
+  void CreateFramebuffers();
+
+  /**
    * @brief SPIR-Vバイトコードからシェーダーモジュールを生成します。
    *
    * @param code SPIR-Vバイナリのバイト列。
@@ -223,4 +231,6 @@ class VulkanApp {
   vk::raii::PipelineLayout pipeline_layout_ = nullptr;
   /// @brief プログラマブルシェーダーおよび固定機能パイプライン状態をカプセル化するグラフィックスパイプライン。
   vk::raii::Pipeline graphics_pipeline_ = nullptr;
+  /// @brief 各スワップチェーンイメージビューを描画アタッチメントとしてバインドしたフレームバッファのリスト。
+  std::vector<vk::raii::Framebuffer> swapchain_framebuffers_;
 };

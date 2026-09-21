@@ -14,6 +14,7 @@
 - [x] レンダーパス生成（[`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
 - [x] `main.cpp`から`VulkanApp`/`Window`クラスへの分割（[`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
 - [x] グラフィックスパイプライン・シェーダー（SPIR-V）生成（[`shaders/`](shaders/), [`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
+- [x] フレームバッファ（Framebuffer）生成（[`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
 
 ## 次のタスク
 
@@ -22,7 +23,7 @@
 - [x] Swapchain Image Viewの作成
 - [x] レンダーパス（Render Pass）の作成
 - [x] グラフィックスパイプライン（シェーダー含む）の作成
-- [ ] フレームバッファ（Framebuffer）の作成
+- [x] フレームバッファ（Framebuffer）の作成
 - [ ] コマンドプール/コマンドバッファの作成
 - [ ] 同期オブジェクト（Semaphore/Fence）の作成、描画ループの実装
 - [ ] ウィンドウリサイズ時のSwapchain再生成
