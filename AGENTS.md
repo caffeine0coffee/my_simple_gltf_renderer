@@ -50,6 +50,8 @@ clang-tidyを手動実行する場合は、clangd（v19系）とバージョン�
 
 `src/` 配下の `.cpp`/`.h`/`.hpp` に変更がある場合のみ `run-clang-tidy-19 -p build/Debug src/` を実行し、警告が1件でもあればコミットを中止する。事前に `build/Debug/compile_commands.json` の生成（configure）と `clang-tidy-19`（`sudo apt install clang-tidy-19`）が必要。緊急時は `git commit --no-verify` でスキップできる。
 
+macOSでは `run-clang-tidy-19` が存在しないため、フックはHomebrewの `llvm@19`（keg-onlyでPATHに入らない）を `brew --prefix llvm@19` で探し、その配下の `run-clang-tidy` / `clang-tidy` を使う。事前に `brew install llvm@19` が必要（PATHへの追加は不要）。
+
 テストの仕組みは未整備。
 
 ## 依存関係（Conan / ConanCenter）

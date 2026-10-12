@@ -18,13 +18,31 @@ if [ ! -f "$compile_db" ]; then
   exit 1
 fi
 
-if ! command -v run-clang-tidy-19 >/dev/null 2>&1; then
-  echo "エラー: run-clang-tidy-19 が見つかりません。'sudo apt install clang-tidy-19' を実行してください。" >&2
+# clang-tidyのv19系（clangdとバージョンを揃える）を探す。
+# - Linux (APT): run-clang-tidy-19 がPATH上にあるので、従来通りそれを使う。
+# - macOS (Homebrew): llvm@19 はkeg-only（/opt/homebrew/bin等にリンクされない）で、
+#   run-clang-tidy-19 という名前のコマンドも存在しない。そこで `brew --prefix llvm@19`
+#   配下の run-clang-tidy を使う。run-clang-tidy は既定でPATH上の clang-tidy を探して
+#   しまうため、-clang-tidy-binary で同じllvm@19の clang-tidy を明示的に指定する。
+run_clang_tidy_cmd=()
+if command -v run-clang-tidy-19 >/dev/null 2>&1; then
+  run_clang_tidy_cmd=(run-clang-tidy-19)
+elif command -v brew >/dev/null 2>&1 \
+  && llvm19_prefix="$(brew --prefix llvm@19 2>/dev/null)" \
+  && [ -x "${llvm19_prefix}/bin/run-clang-tidy" ] \
+  && [ -x "${llvm19_prefix}/bin/clang-tidy" ]; then
+  run_clang_tidy_cmd=("${llvm19_prefix}/bin/run-clang-tidy" -clang-tidy-binary "${llvm19_prefix}/bin/clang-tidy")
+fi
+
+if [ ${#run_clang_tidy_cmd[@]} -eq 0 ]; then
+  echo "エラー: clang-tidy v19系が見つかりません。以下のいずれかでインストールしてください:" >&2
+  echo "  Linux: sudo apt install clang-tidy-19" >&2
+  echo "  macOS: brew install llvm@19" >&2
   exit 1
 fi
 
 echo "clang-tidy-19でsrc/を検査しています..."
-output="$(run-clang-tidy-19 -p build/Debug src/ 2>&1)" || true
+output="$("${run_clang_tidy_cmd[@]}" -p build/Debug src/ 2>&1)" || true
 
 if grep -q "warning:" <<< "$output"; then
   grep "warning:" <<< "$output" >&2
