@@ -15,6 +15,8 @@
 - [x] `main.cpp`から`VulkanApp`/`Window`クラスへの分割（[`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
 - [x] グラフィックスパイプライン・シェーダー（SPIR-V）生成（[`shaders/`](shaders/), [`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
 - [x] フレームバッファ（Framebuffer）生成（[`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
+- [x] コマンドプール生成・コマンドバッファ確保（in-flightフレーム数 `kMaxFramesInFlight=2` 個）、描画コマンド記録関数 `RecordCommandBuffer()`（[`src/vulkan_app.h`](file:///home/caffeine/DevelopEnv/git_repos/my_graphics_engine/gltf_renderer/src/vulkan_app.h)）
+  - `RecordCommandBuffer()` は現時点では未使用。キューへのsubmit・presentは次タスク（描画ループ）で実装する
 
 ## 次のタスク
 
@@ -24,8 +26,11 @@
 - [x] レンダーパス（Render Pass）の作成
 - [x] グラフィックスパイプライン（シェーダー含む）の作成
 - [x] フレームバッファ（Framebuffer）の作成
-- [ ] コマンドプール/コマンドバッファの作成
+- [x] コマンドプール/コマンドバッファの作成
 - [ ] 同期オブジェクト（Semaphore/Fence）の作成、描画ループの実装
+  - in-flightフレームごとの `imageAvailable` Semaphore / `inFlight` Fence（`kMaxFramesInFlight` 個）と、`current_frame_` によるコマンドバッファの切り替え
+  - `renderFinished` Semaphoreはスワップチェーンイメージごとに持つ方が安全（Validation Layerの推奨）
+  - 終了時に `device_.waitIdle()` を呼び、GPU処理の完了を待ってからRAIIで破棄する
 - [ ] ウィンドウリサイズ時のSwapchain再生成
 
 その先の展望:

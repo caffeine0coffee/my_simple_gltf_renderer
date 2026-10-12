@@ -58,9 +58,12 @@ VulkanApp::VulkanApp(Window& window) : window_(window) {
   CreateRenderPass();
   CreateGraphicsPipeline();
   CreateFramebuffers();
+  CreateCommandPool();
+  CreateCommandBuffers();
 
   spdlog::info(
-      "Vulkan instance, device, swapchain, image views, render pass, graphics pipeline, and framebuffers created");
+      "Vulkan instance, device, swapchain, image views, render pass, graphics pipeline, framebuffers, "
+      "and command buffers created");
 }
 
 void VulkanApp::CreateInstance() {
@@ -654,4 +657,106 @@ void VulkanApp::CreateFramebuffers() {
   }
 
   spdlog::info("framebuffers created (count: {})", swapchain_framebuffers_.size());
+}
+
+void VulkanApp::CreateCommandPool() {
+  const auto indices = FindQueueFamilies(physical_device_);
+  // PickPhysicalDevice()がIsDeviceSuitable()で必須キューファミリーの存在を
+  // 確認済みのdeviceのみを選択しているため本来失敗しないが、
+  // bugprone-unchecked-optional-access対応を兼ねて明示的に検証する。
+  if (!indices.graphics_family.has_value()) {
+    throw std::runtime_error("selected physical device unexpectedly lacks a graphics queue family");
+  }
+
+  const vk::CommandPoolCreateInfo pool_info{
+      // eResetCommandBuffer: プールから確保したコマンドバッファを1個ずつ reset() できるようにする。
+      // 毎フレーム同じコマンドバッファをリセットして記録し直すために必要。
+      // （このフラグが無い場合は、プール全体をまとめてリセットする必要がある）
+      .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+      // コマンドプールから確保したコマンドバッファは、ここで指定したキューファミリーの
+      // キューにしか送信できない。描画コマンドを送るのでグラフィックスキューファミリーを指定する。
+      .queueFamilyIndex = *indices.graphics_family,
+  };
+
+  command_pool_ = vk::raii::CommandPool(device_, pool_info);
+
+  spdlog::info("command pool created");
+}
+
+void VulkanApp::CreateCommandBuffers() {
+  const vk::CommandBufferAllocateInfo alloc_info{
+      .commandPool = *command_pool_,
+      // ePrimary: キューへ直接送信できるコマンドバッファ。
+      // （eSecondaryは直接送信できず、プライマリから呼び出して使う。マルチスレッド記録などで利用する）
+      .level = vk::CommandBufferLevel::ePrimary,
+      // in-flightフレームごとに1個ずつ確保する。GPUがフレームNのコマンドバッファを実行中でも、
+      // CPUは別のコマンドバッファへフレームN+1を記録できる（実際の切り替えは描画ループのタスクで実装する）。
+      .commandBufferCount = kMaxFramesInFlight,
+  };
+
+  command_buffers_ = device_.allocateCommandBuffers(alloc_info);
+
+  spdlog::info("command buffers allocated (count: {})", command_buffers_.size());
+}
+
+void VulkanApp::RecordCommandBuffer(const vk::raii::CommandBuffer& command_buffer, uint32_t image_index) const {
+  // 1. 記録の開始
+  // 毎フレーム記録し直す前提のため、特別な使用フラグ（eOneTimeSubmit等）は指定しない。
+  command_buffer.begin(vk::CommandBufferBeginInfo{});
+
+  // 2. レンダーパスの開始
+  // RenderPassのloadOp=eClearで使われるクリア色（黒・不透明）。
+  // vk::ClearValue/vk::ClearColorValue は共用体（union）であり、
+  // VULKAN_HPP_NO_STRUCT_CONSTRUCTORS の影響を受けないためコンストラクタで初期化する。
+  const vk::ClearValue clear_color{vk::ClearColorValue{0.0F, 0.0F, 0.0F, 1.0F}};
+
+  const vk::RenderPassBeginInfo render_pass_info{
+      .renderPass = *render_pass_,
+      // 描画先のスワップチェーンイメージに対応するフレームバッファを選ぶ。
+      .framebuffer = *swapchain_framebuffers_.at(image_index),
+      // シェーダーの読み書きが行われる領域。アタッチメント全体を対象にする。
+      .renderArea =
+          {
+              .offset = {.x = 0, .y = 0},
+              .extent = swapchain_extent_,
+          },
+      // アタッチメント（ここではカラー1つ）ごとのクリア値。
+      .clearValueCount = 1,
+      .pClearValues = &clear_color,
+  };
+
+  // eInline: サブパスのコマンドをこのプライマリコマンドバッファへ直接記録する
+  // （セカンダリコマンドバッファは使わない）。
+  command_buffer.beginRenderPass(render_pass_info, vk::SubpassContents::eInline);
+
+  // 3. グラフィックスパイプラインのバインド
+  command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphics_pipeline_);
+
+  // 4. 動的状態（ビューポート/シザー）の設定
+  // パイプライン作成時にこれらをDynamic Stateとしたため、描画前に必ず設定する必要がある。
+  const vk::Viewport viewport{
+      .x = 0.0F,
+      .y = 0.0F,
+      .width = static_cast<float>(swapchain_extent_.width),
+      .height = static_cast<float>(swapchain_extent_.height),
+      .minDepth = 0.0F,
+      .maxDepth = 1.0F,
+  };
+  command_buffer.setViewport(0, viewport);
+
+  const vk::Rect2D scissor{
+      .offset = {.x = 0, .y = 0},
+      .extent = swapchain_extent_,
+  };
+  command_buffer.setScissor(0, scissor);
+
+  // 5. 描画コマンド
+  // 頂点座標は頂点シェーダー内にハードコードされているため、頂点バッファは不要。
+  // vertexCount=3（三角形1つ）, instanceCount=1, firstVertex=0, firstInstance=0。
+  command_buffer.draw(3, 1, 0, 0);
+
+  // 6. レンダーパスの終了と記録の終了
+  // レンダーパス終了時に、カラーアタッチメントは finalLayout（ePresentSrcKHR）へ遷移する。
+  command_buffer.endRenderPass();
+  command_buffer.end();
 }

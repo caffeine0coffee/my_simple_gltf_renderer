@@ -128,6 +128,32 @@ class VulkanApp {
   void CreateFramebuffers();
 
   /**
+   * @brief コマンドバッファの確保元となるコマンドプールを生成します。
+   *
+   * コマンドプールは特定のキューファミリーに紐づくため、描画コマンドを
+   * 送信するグラフィックスキューファミリーを指定して作成します。
+   *
+   * @throw std::runtime_error 必須キューファミリーが取得できない場合。
+   */
+  void CreateCommandPool();
+
+  /**
+   * @brief コマンドプールから、同時に処理中（in-flight）となりうるフレーム数分のコマンドバッファを確保します。
+   */
+  void CreateCommandBuffers();
+
+  /**
+   * @brief 指定したスワップチェーンイメージへ三角形を描画するコマンドをコマンドバッファに記録します。
+   *
+   * レンダーパス開始 → パイプラインのバインド → ビューポート/シザー設定 → 描画 → レンダーパス終了
+   * の順にコマンドを記録します。記録のみを行い、キューへの送信（submit）は行いません。
+   *
+   * @param command_buffer 記録先のコマンドバッファ（リセット済み、または未記録の状態であること）。
+   * @param image_index 描画先となるスワップチェーンイメージ（フレームバッファ）のインデックス。
+   */
+  void RecordCommandBuffer(const vk::raii::CommandBuffer& command_buffer, uint32_t image_index) const;
+
+  /**
    * @brief SPIR-Vバイトコードからシェーダーモジュールを生成します。
    *
    * @param code SPIR-Vバイナリのバイト列。
@@ -202,6 +228,11 @@ class VulkanApp {
    */
   [[nodiscard]] vk::Extent2D ChooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) const;
 
+  /// @brief CPUが同時に準備（記録・送信）できるフレームの最大数。
+  /// 2にすると、GPUが1フレーム目を描画している間にCPUが2フレーム目のコマンドを記録でき、
+  /// CPUとGPUが互いの完了を待つ時間を減らせます。値を増やすほど入力遅延（レイテンシ）は増えます。
+  static constexpr uint32_t kMaxFramesInFlight = 2;
+
   /// @brief 描画対象ウィンドウへの非所有参照。破棄順序の制約は呼び出し側の変数宣言順で保証します。
   Window& window_;
 
@@ -233,4 +264,10 @@ class VulkanApp {
   vk::raii::Pipeline graphics_pipeline_ = nullptr;
   /// @brief 各スワップチェーンイメージビューを描画アタッチメントとしてバインドしたフレームバッファのリスト。
   std::vector<vk::raii::Framebuffer> swapchain_framebuffers_;
+  /// @brief コマンドバッファの確保元。コマンドバッファより先に宣言し、後に破棄されるようにします。
+  vk::raii::CommandPool command_pool_ = nullptr;
+  /// @brief in-flightフレームごとのコマンドバッファ（要素数は kMaxFramesInFlight）。
+  /// vk::raii::CommandBuffer は破棄時に確保元のプールへ返却（vkFreeCommandBuffers）するため、
+  /// command_pool_ より後に宣言して先に破棄されるようにします。
+  std::vector<vk::raii::CommandBuffer> command_buffers_;
 };
