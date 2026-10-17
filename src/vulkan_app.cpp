@@ -60,10 +60,24 @@ VulkanApp::VulkanApp(Window& window) : window_(window) {
   CreateFramebuffers();
   CreateCommandPool();
   CreateCommandBuffers();
+  CreateSyncObjects();
 
   spdlog::info(
       "Vulkan instance, device, swapchain, image views, render pass, graphics pipeline, framebuffers, "
-      "and command buffers created");
+      "command buffers, and sync objects created");
+}
+
+VulkanApp::~VulkanApp() {
+  if (*device_) {
+    // オブジェクトの破棄時にGPUがまだコマンドを実行していると未定義動作になるため、
+    // 全キューのアイドル状態（完了）を待機してからRAIIメンバの破棄を開始する。
+    // デストラクタからの例外送出を防ぐため、例外を捕捉してログ出力します。
+    try {
+      device_.waitIdle();
+    } catch (const std::exception& e) {
+      spdlog::error("Failed to wait for device idle in destructor: {}", e.what());
+    }
+  }
 }
 
 void VulkanApp::CreateInstance() {
@@ -699,6 +713,33 @@ void VulkanApp::CreateCommandBuffers() {
   spdlog::info("command buffers allocated (count: {})", command_buffers_.size());
 }
 
+void VulkanApp::CreateSyncObjects() {
+  image_available_semaphores_.reserve(kMaxFramesInFlight);
+  in_flight_fences_.reserve(kMaxFramesInFlight);
+
+  const vk::SemaphoreCreateInfo semaphore_info{};
+  // フェンスは初回フレームの waitForFences() でブロックされないよう、Signaled 状態で作成する。
+  const vk::FenceCreateInfo fence_info{
+      .flags = vk::FenceCreateFlagBits::eSignaled,
+  };
+
+  for (uint32_t i = 0; i < kMaxFramesInFlight; ++i) {
+    image_available_semaphores_.emplace_back(device_, semaphore_info);
+    in_flight_fences_.emplace_back(device_, fence_info);
+  }
+
+  // スワップチェーンイメージ数分のレンダリング完了セマフォ。
+  // Validation Layerの推奨に従い、プレゼンテーション待機中のセマフォ再利用を防ぐため
+  // スワップチェーン画像ごとに保持する。
+  render_finished_semaphores_.reserve(swapchain_images_.size());
+  for (size_t i = 0; i < swapchain_images_.size(); ++i) {
+    render_finished_semaphores_.emplace_back(device_, semaphore_info);
+  }
+
+  spdlog::info("sync objects created (in-flight: {}, swapchain images: {})", kMaxFramesInFlight,
+               swapchain_images_.size());
+}
+
 void VulkanApp::RecordCommandBuffer(const vk::raii::CommandBuffer& command_buffer, uint32_t image_index) const {
   // 1. 記録の開始
   // 毎フレーム記録し直す前提のため、特別な使用フラグ（eOneTimeSubmit等）は指定しない。
@@ -759,4 +800,62 @@ void VulkanApp::RecordCommandBuffer(const vk::raii::CommandBuffer& command_buffe
   // レンダーパス終了時に、カラーアタッチメントは finalLayout（ePresentSrcKHR）へ遷移する。
   command_buffer.endRenderPass();
   command_buffer.end();
+}
+
+void VulkanApp::DrawFrame() {
+  // 1. 前回のこのフレームスロットのGPU処理完了を待機する。
+  // タイムアウトには最大値（UINT64_MAXナノ秒）を指定して完了を待つ。
+  const auto wait_result =
+      device_.waitForFences(*in_flight_fences_[current_frame_], VK_TRUE, std::numeric_limits<uint64_t>::max());
+  if (wait_result != vk::Result::eSuccess) {
+    spdlog::warn("waitForFences returned {}", vk::to_string(wait_result));
+  }
+
+  // 2. スワップチェーンから次の利用可能イメージを取得する。
+  // 利用可能になった時点で image_available_semaphores_[current_frame_] がシグナル状態になる。
+  const auto [acquire_result, image_index] = swapchain_.acquireNextImage(
+      std::numeric_limits<uint64_t>::max(), *image_available_semaphores_[current_frame_]);
+
+  // 3. フェンスを未シグナル状態にリセットする。
+  // acquireNextImage 成功後にリセットすることで、万一例外等で途中で抜けた場合に
+  // フェンスが未シグナルのまま永久ブロックするのを防ぐ。
+  device_.resetFences(*in_flight_fences_[current_frame_]);
+
+  // 4. コマンドバッファをリセットし、描画コマンドを再記録する。
+  command_buffers_[current_frame_].reset();
+  RecordCommandBuffer(command_buffers_[current_frame_], image_index);
+
+  // 5. グラフィックスキューへコマンドバッファを送信（Submit）する。
+  // スワップチェーンイメージが準備できるまでカラーアタッチメント出力ステージで待機し、
+  // 描画が完了したら render_finished_semaphores_[image_index] と in_flight_fences_[current_frame_] をシグナル状態にする。
+  const vk::PipelineStageFlags wait_stages = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+  const vk::SubmitInfo submit_info{
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &*image_available_semaphores_[current_frame_],
+      .pWaitDstStageMask = &wait_stages,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &*command_buffers_[current_frame_],
+      .signalSemaphoreCount = 1,
+      .pSignalSemaphores = &*render_finished_semaphores_[image_index],
+  };
+
+  graphics_queue_.submit(submit_info, *in_flight_fences_[current_frame_]);
+
+  // 6. 描画結果を画面へプレゼンテーション（Present）する。
+  // render_finished_semaphores_[image_index] がシグナル状態になるまで待機する。
+  const vk::PresentInfoKHR present_info{
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &*render_finished_semaphores_[image_index],
+      .swapchainCount = 1,
+      .pSwapchains = &*swapchain_,
+      .pImageIndices = &image_index,
+  };
+
+  const auto present_result = present_queue_.presentKHR(present_info);
+  if (present_result != vk::Result::eSuccess && present_result != vk::Result::eSuboptimalKHR) {
+    spdlog::warn("presentKHR returned {}", vk::to_string(present_result));
+  }
+
+  // 7. 次のin-flightフレームへインデックスを進める。
+  current_frame_ = (current_frame_ + 1) % kMaxFramesInFlight;
 }

@@ -31,6 +31,19 @@ class VulkanApp {
    */
   explicit VulkanApp(Window& window);
 
+  /**
+   * @brief デストラクタ。GPUの実行完了（device_.waitIdle()）を待機してからリソースを破棄します。
+   */
+  ~VulkanApp();
+
+  /**
+   * @brief 1フレーム分の描画処理を実行します。
+   *
+   * 前フレームのGPU完了待機、スワップチェーンイメージの取得、コマンドバッファの記録、
+   * キューへの送信（submit）、画面へのプレゼンテーション（present）を行います。
+   */
+  void DrawFrame();
+
  private:
   /**
    * @brief グラフィックス描画・プレゼンテーションの各操作に使うキューファミリーのインデックス。
@@ -141,6 +154,14 @@ class VulkanApp {
    * @brief コマンドプールから、同時に処理中（in-flight）となりうるフレーム数分のコマンドバッファを確保します。
    */
   void CreateCommandBuffers();
+
+  /**
+   * @brief 同期オブジェクト（セマフォ・フェンス）を生成します。
+   *
+   * in-flightフレーム数分の imageAvailable セマフォと inFlight フェンス、
+   * およびスワップチェーンイメージ数分の renderFinished セマフォを生成します。
+   */
+  void CreateSyncObjects();
 
   /**
    * @brief 指定したスワップチェーンイメージへ三角形を描画するコマンドをコマンドバッファに記録します。
@@ -270,4 +291,15 @@ class VulkanApp {
   /// vk::raii::CommandBuffer は破棄時に確保元のプールへ返却（vkFreeCommandBuffers）するため、
   /// command_pool_ より後に宣言して先に破棄されるようにします。
   std::vector<vk::raii::CommandBuffer> command_buffers_;
+
+  /// @brief スワップチェーン画像が利用可能になるのを待機するためのセマフォ（in-flightフレームごと、要素数は kMaxFramesInFlight）。
+  std::vector<vk::raii::Semaphore> image_available_semaphores_;
+  /// @brief レンダリング完了を待機するためのセマフォ（スワップチェーンイメージごと、要素数は swapchain_images_.size()）。
+  /// Validation Layerの推奨に従い、プレゼンテーション待機中のセマフォ再利用を防ぐためスワップチェーン画像ごとに保持します。
+  std::vector<vk::raii::Semaphore> render_finished_semaphores_;
+  /// @brief 前フレームのGPU描画完了をCPU側で待機するためのフェンス（in-flightフレームごと、要素数は kMaxFramesInFlight）。
+  std::vector<vk::raii::Fence> in_flight_fences_;
+
+  /// @brief 現在処理中のin-flightフレームのインデックス（0 〜 kMaxFramesInFlight - 1）。
+  uint32_t current_frame_ = 0;
 };
