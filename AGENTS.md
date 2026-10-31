@@ -125,3 +125,10 @@ Vulkanによる実装を行う際は、以下のライブラリを使用して�
 - Vulkanの公式ガイド: /khronosgroup/vulkan-guide
 
 その他のライブラリは必要に応じてContext7 MCPからクエリしてください。
+
+### リンク記法について
+
+markdownファイルやコメント文でファイルやwebページのリンクを記載する際は、markdownのリンク記法などは用いずそのままのファイルパスやURLを記載してください。
+
+NG: [`src/vulkan_app.h`](src/vulkan_app.h)
+OK: src/vulkan_app.h
