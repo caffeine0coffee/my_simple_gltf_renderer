@@ -21,10 +21,14 @@
   - `renderFinished` Semaphoreはスワップチェーンイメージごとに保持（Validation Layer推奨・競合安全）
   - `main.cpp` のイベントループから `app.DrawFrame()` を毎フレーム呼び出し
   - デストラクタ `~VulkanApp()` で `device_.waitIdle()` を呼び、GPU処理の完了を待ってからRAIIで安全に破棄
+- [x] ウィンドウリサイズ時のSwapchain再生成（src/window.h, src/window.cpp, src/vulkan_app.h, src/vulkan_app.cpp）
+  - GLFWフレームバッファサイズ変更コールバック `FramebufferResizeCallback()` と `WaitEvents()` の実装
+  - `CleanupSwapchain()` / `RecreateSwapchain()` によるスワップチェーン・ImageView・Framebuffer・renderFinishedセマフォの再生成と最小化時（0x0）の待機処理
+  - `DrawFrame()` における `vk::OutOfDateKHRError` / `vk::Result::eSuboptimalKHR` / リサイズフラグの検知と再生成呼び出し
 
 ## 次のタスク
 
-三角形描画までの一連の実装を優先順に進める想定です。
+三角形描画までの一連の実装が完了しました。
 
 - [x] Swapchain Image Viewの作成
 - [x] レンダーパス（Render Pass）の作成
@@ -32,7 +36,7 @@
 - [x] フレームバッファ（Framebuffer）の作成
 - [x] コマンドプール/コマンドバッファの作成
 - [x] 同期オブジェクト（Semaphore/Fence）の作成、描画ループの実装
-- [ ] ウィンドウリサイズ時のSwapchain再生成
+- [x] ウィンドウリサイズ時のSwapchain再生成
 
 その先の展望:
 

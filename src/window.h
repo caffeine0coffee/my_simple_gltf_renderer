@@ -51,6 +51,26 @@ class Window {
   static void PollEvents();
 
   /**
+   * @brief ウィンドウイベントが到着するまで現在のスレッドをブロックして待機します。
+   *
+   * ウィンドウ最小化中（フレームバッファサイズが 0x0 の状態）など、
+   * ビジーループを避けて次のイベント（復元・リサイズ等）を待つ際に使用します。
+   */
+  static void WaitEvents();
+
+  /**
+   * @brief フレームバッファのリサイズが発生したかどうかを取得します。
+   *
+   * @return 前回のリセット以降にリサイズが発生した場合は true、そうでない場合は false。
+   */
+  [[nodiscard]] bool IsFramebufferResized() const;
+
+  /**
+   * @brief フレームバッファのリサイズ検知フラグをクリア（false にリセット）します。
+   */
+  void ResetFramebufferResized();
+
+  /**
    * @brief Vulkan Instanceの作成に必要なGLFWの拡張機能名リストを取得します。
    *
    * @return 必要な拡張機能名のリスト。
@@ -78,5 +98,19 @@ class Window {
   [[nodiscard]] vk::raii::SurfaceKHR CreateSurface(const vk::raii::Instance& instance) const;
 
  private:
+  /**
+   * @brief GLFWフレームバッファサイズ変更時に呼ばれるコールバック関数。
+   *
+   * glfwSetWindowUserPointer() で登録された Window インスタンスを取り出し、
+   * リサイズフラグを true に設定します。
+   *
+   * @param window サイズが変更されたGLFWウィンドウハンドル。
+   * @param width 新しいフレームバッファの幅（ピクセル単位、未使用）。
+   * @param height 新しいフレームバッファの高さ（ピクセル単位、未使用）。
+   */
+  static void FramebufferResizeCallback(GLFWwindow* window, int width, int height);
+
   GLFWwindow* window_ = nullptr;
+  /// @brief ウィンドウのフレームバッファがリサイズされたことを示すフラグ。
+  bool framebuffer_resized_ = false;
 };

@@ -359,6 +359,46 @@ void VulkanApp::CreateSwapchain() {
                vk::to_string(swapchain_image_format_), swapchain_images_.size());
 }
 
+void VulkanApp::CleanupSwapchain() {
+  // Framebuffer -> ImageView -> Swapchain の依存関係に従い、逆順で明示的に破棄する。
+  swapchain_framebuffers_.clear();
+  swapchain_image_views_.clear();
+  swapchain_ = nullptr;
+}
+
+void VulkanApp::RecreateSwapchain() {
+  // ウィンドウ最小化時などはフレームバッファサイズが 0x0 になるため、
+  // サイズが非 0 に復帰するまでイベントを待機して一時停止する
+  // （Vulkan仕様上、幅または高さが 0 のスワップチェーンは作成できないため）。
+  auto extent = window_.GetFramebufferSize();
+  while (extent.width == 0 || extent.height == 0) {
+    Window::WaitEvents();
+    extent = window_.GetFramebufferSize();
+  }
+
+  // acquireNextImage の OutOfDate 等から呼ばれた場合も含め、今回のリサイズイベントを消化扱いにする。
+  window_.ResetFramebufferResized();
+
+  // 使用中のリソースを破棄しないよう、GPU側の処理がすべて完了するまで待機する。
+  device_.waitIdle();
+
+  CleanupSwapchain();
+
+  CreateSwapchain();
+  CreateImageViews();
+  CreateFramebuffers();
+
+  // スワップチェーン再生成に伴いイメージ数が変化した場合や、presentKHR が
+  // OutOfDate で失敗しシグナル状態のまま残ったセマフォをリセットするため、
+  // スワップチェーン画像ごとの renderFinished セマフォも作り直す。
+  render_finished_semaphores_.clear();
+  render_finished_semaphores_.reserve(swapchain_images_.size());
+  const vk::SemaphoreCreateInfo semaphore_info{};
+  for (size_t i = 0; i < swapchain_images_.size(); ++i) {
+    render_finished_semaphores_.emplace_back(device_, semaphore_info);
+  }
+}
+
 void VulkanApp::CreateImageViews() {
   swapchain_image_views_.reserve(swapchain_images_.size());
 
@@ -813,12 +853,26 @@ void VulkanApp::DrawFrame() {
 
   // 2. スワップチェーンから次の利用可能イメージを取得する。
   // 利用可能になった時点で image_available_semaphores_[current_frame_] がシグナル状態になる。
-  const auto [acquire_result, image_index] = swapchain_.acquireNextImage(
-      std::numeric_limits<uint64_t>::max(), *image_available_semaphores_[current_frame_]);
+  // OutOfDate の場合は描画できないため即座にスワップチェーンを再生成してこのフレームを中断する。
+  // Suboptimal の場合はイメージ取得自体は成功しておりセマフォもシグナルされているため、
+  // このフレームの描画・Presentを最後まで完了させてからスワップチェーンを再生成する。
+  uint32_t image_index = 0;
+  bool should_recreate_swapchain = false;
+  try {
+    const auto [acquire_result, acquired_index] = swapchain_.acquireNextImage(
+        std::numeric_limits<uint64_t>::max(), *image_available_semaphores_[current_frame_]);
+    image_index = acquired_index;
+    if (acquire_result == vk::Result::eSuboptimalKHR) {
+      should_recreate_swapchain = true;
+    }
+  } catch (const vk::OutOfDateKHRError&) {
+    RecreateSwapchain();
+    return;
+  }
 
   // 3. フェンスを未シグナル状態にリセットする。
-  // acquireNextImage 成功後にリセットすることで、万一例外等で途中で抜けた場合に
-  // フェンスが未シグナルのまま永久ブロックするのを防ぐ。
+  // acquireNextImage 成功後にリセットすることで、OutOfDate で早期リターンした場合に
+  // フェンスが未シグナルのまま次フレームの waitForFences で永久ブロックするのを防ぐ。
   device_.resetFences(*in_flight_fences_[current_frame_]);
 
   // 4. コマンドバッファをリセットし、描画コマンドを再記録する。
@@ -827,7 +881,8 @@ void VulkanApp::DrawFrame() {
 
   // 5. グラフィックスキューへコマンドバッファを送信（Submit）する。
   // スワップチェーンイメージが準備できるまでカラーアタッチメント出力ステージで待機し、
-  // 描画が完了したら render_finished_semaphores_[image_index] と in_flight_fences_[current_frame_] をシグナル状態にする。
+  // 描画が完了したら render_finished_semaphores_[image_index] と
+  // in_flight_fences_[current_frame_] をシグナル状態にする。
   const vk::PipelineStageFlags wait_stages = vk::PipelineStageFlagBits::eColorAttachmentOutput;
   const vk::SubmitInfo submit_info{
       .waitSemaphoreCount = 1,
@@ -851,9 +906,19 @@ void VulkanApp::DrawFrame() {
       .pImageIndices = &image_index,
   };
 
-  const auto present_result = present_queue_.presentKHR(present_info);
-  if (present_result != vk::Result::eSuccess && present_result != vk::Result::eSuboptimalKHR) {
-    spdlog::warn("presentKHR returned {}", vk::to_string(present_result));
+  try {
+    const auto present_result = present_queue_.presentKHR(present_info);
+    if (present_result == vk::Result::eSuboptimalKHR) {
+      should_recreate_swapchain = true;
+    } else if (present_result != vk::Result::eSuccess) {
+      spdlog::warn("presentKHR returned {}", vk::to_string(present_result));
+    }
+  } catch (const vk::OutOfDateKHRError&) {
+    should_recreate_swapchain = true;
+  }
+
+  if (should_recreate_swapchain || window_.IsFramebufferResized()) {
+    RecreateSwapchain();
   }
 
   // 7. 次のin-flightフレームへインデックスを進める。

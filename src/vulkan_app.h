@@ -110,6 +110,19 @@ class VulkanApp {
   void CreateSwapchain();
 
   /**
+   * @brief スワップチェーンおよびそれに依存するリソース（Framebuffer、ImageView）を依存関係の逆順で破棄します。
+   */
+  void CleanupSwapchain();
+
+  /**
+   * @brief ウィンドウリサイズ時等にスワップチェーンと関連リソース一式を再生成します。
+   *
+   * ウィンドウ最小化中（サイズ0x0）は復元されるまで待機し、GPUのアイドル待機と古いリソースの
+   * 破棄を行った上で、Swapchain、ImageView、Framebuffer、renderFinishedセマフォを再作成します。
+   */
+  void RecreateSwapchain();
+
+  /**
    * @brief スワップチェーンイメージごとにImageView（描画・参照用ビュー）を生成します。
    */
   void CreateImageViews();

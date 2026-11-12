@@ -30,6 +30,11 @@ Window::Window(int width, int height, const char* title) {
   if (window_ == nullptr) {
     throw std::runtime_error("failed to create GLFW window");
   }
+
+  // C APIのコールバック関数からこのWindowインスタンスのメンバにアクセスできるよう、
+  // ユーザーポインタとして this を紐付け、フレームバッファサイズ変更コールバックを登録する。
+  glfwSetWindowUserPointer(window_, this);
+  glfwSetFramebufferSizeCallback(window_, FramebufferResizeCallback);
 }
 
 Window::~Window() {
@@ -40,6 +45,19 @@ Window::~Window() {
 bool Window::ShouldClose() const { return glfwWindowShouldClose(window_); }
 
 void Window::PollEvents() { glfwPollEvents(); }
+
+void Window::WaitEvents() { glfwWaitEvents(); }
+
+bool Window::IsFramebufferResized() const { return framebuffer_resized_; }
+
+void Window::ResetFramebufferResized() { framebuffer_resized_ = false; }
+
+void Window::FramebufferResizeCallback(GLFWwindow* window, int /*width*/, int /*height*/) {
+  auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+  if (self != nullptr) {
+    self->framebuffer_resized_ = true;
+  }
+}
 
 std::vector<const char*> Window::GetRequiredInstanceExtensions() {
   uint32_t glfw_extension_count = 0;
